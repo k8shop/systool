@@ -1,5 +1,3 @@
-// +build windows
-
 package systool
 
 import (
@@ -11,6 +9,9 @@ import (
     "strings"
     "syscall"
     "time"
+    "unsafe"
+
+    "golang.org/x/sys/windows"
 )
 
 var chcp65001done bool
@@ -69,4 +70,30 @@ func CmdBat(runAsAdmin bool, lines ...string) []byte {
     } else {
         return CmdOut(file.Name())
     }
+}
+
+// show_window:
+//   windows.SW_SHOWNORMAL
+//   windows.SW_HIDE
+func RunAsAdmin(exe string, args string, show_window uintptr) error {
+    shell32 := windows.NewLazySystemDLL("shell32.dll")
+    shellExecute := shell32.NewProc("ShellExecuteW")
+
+    verb, _ := syscall.UTF16PtrFromString("runas")
+    file, _ := syscall.UTF16PtrFromString(exe)
+    argPtr, _ := syscall.UTF16PtrFromString(args)
+
+    ret, _, _ := shellExecute.Call(
+        0,
+        uintptr(unsafe.Pointer(verb)),
+        uintptr(unsafe.Pointer(file)),
+        uintptr(unsafe.Pointer(argPtr)),
+        0,
+        show_window,
+    )
+
+    if ret <= 32 {
+        return fmt.Errorf("ShellExecute failed with code %d", ret)
+    }
+    return nil
 }
